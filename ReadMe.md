@@ -4,12 +4,38 @@
 
 With any workout plan generated, consider how your body feels, this is just a tool to help select workouts and you should exercise your own judgment for what makes the most sense for you.
 
-71 Swim Workouts
-218 Bike Workouts
-190 Run Workouts
+-------
 
-Takes 30 seconds to test 10000 combinations of six workouts
+This repo is designed to add some variety to triathlon workouts by creating a set of workouts one could follow which fit certain user defined criteria and scores each workout plan based on how closely it matches the criteria.
 
-Would take 11,490,020 years to test all combinations
+The software currently only allows for biking and running workouts (as currently I don't have a pool to swim in). There are several criteria you can set:
 
-Is this the most efficient way to determine workouts? Probably not. It'd likely be easier to build a program giving it the constraints and design workouts which fulfill the criteria rather than from a selected list, but this makes for an interesting optimization problem.
+* Total TSS for week
+* Running/Biking Split
+* Low/High Intensity of workouts
+
+For instance my original use case was to aim for 20% high intensity/80% low intensity, 67% Biking/33% Running, and changing the TSS based on the week. 
+
+The software will output a dataframe looking like below:
+
+                                           Workouts  Score  Total Duration   Total TSS  % Bike Dur  % Run Dur  % High Dur  % Low Dur  % Run TSS  % Bike TSS  % High Run Dur  % Low Run Dur  % High Bike Dur  % Low Bike Dur
+    0        [RCI1, CT25, RAn5, RHR5, CFo23, CFo21]  98.33           417.0  491.667002        0.66       0.34        0.19       0.81       0.33        0.67            0.20           0.80             0.19            0.81
+    1      [CFo11, RFF6, CT12, RSP16, RSP19, CFF14]  98.27           443.0  517.212522        0.67       0.33        0.20       0.80       0.33        0.67            0.18           0.81             0.20            0.80
+    2      [CCI5, RAn4, RAe22, CFF12, CFo14, RLI12]  98.21           424.0  485.460210        0.68       0.32        0.20       0.80       0.33        0.67            0.19           0.81             0.20            0.80
+    3       [RT12, CCI2, RT19, CSP14, CSP10, CFF15]  98.06           461.0  510.143744        0.69       0.31        0.20       0.80       0.34        0.66            0.21           0.79             0.19            0.81
+    4          [RLI4, CFF10, RLI2, RF8, CT12, CAn5]  97.85           435.0  490.597103        0.70       0.30        0.20       0.80       0.33        0.67            0.21           0.79             0.20            0.80
+    ...
+
+This requires a predefined list of works in a Run.xlsx and Bike.xlsx file to pull workouts from. I used the workouts from 8020endurance [Workout Library](https://www.8020endurance.com/8020-workout-library/). I believe that it would not be proper for me to share the raw data files so I have not uploaded them, but have added a sample of some random workouts to give an idea of what they should look like.
+
+## Process to use:
+
+TBD
+
+### Runtime Basic Analysis
+
+If one were to generate every combination of workouts using 8020endurance's workouts, assuming six workouts that week, there are 71 Swim, 218 Bike, 190 Runn workouts, resulting in 12,078,502,137,213,100 possible combinations, which on my computer would take 11,490,020 years (given 10000 combos in 30 seconds). Clearly that is too long.
+
+To make a "good enough" solution, the software will compute a random set of workout plans, and for each one will try up to 25 times to replace workouts to get within the 5% of the TSS limit and 25% of the upper high intensity limit, a sort of guided greedy method. Running this on a 5950X on 30 threads, it takes one minute to test 10,000 workout plans resulting in ~700 plans which score over 90. Quite a few over 97.  
+
+Is this the most efficient way to determine workouts? Probably not. It'd likely be easier to build a program giving it the constraints and design workouts which fulfill the criteria rather than from a selected list, but this makes for an interesting optimization problem. I would like to try some other optimizaiton algorithims after this for fun (Simulated Annealing, Genetic Algorithms, Linear Programming, tec...)
