@@ -2,164 +2,166 @@ import pandas as pd
 import time
 import multiprocessing as mp
 import random
-from classes import triVariables as triv
+from classes import triVariables as triv, workout
+
 
 def load_workouts(run_file, bike_file, swim_file):
-    run_df = pd.read_excel(run_file, index_col=0, engine='openpyxl')
-    bike_df = pd.read_excel(bike_file, index_col=0, engine='openpyxl')
-    # swim_df = pd.read_excel(swim_file, index_col=0, engine='openpyxl')
+    df = pd.DataFrame()
 
-    run_df = run_df[run_df['TSS'] != 0]
-    run_df = run_df[run_df['TSS'].notnull()]
+    if triv.run_tgt_percent > 0:
+        run_df = pd.read_excel(run_file, index_col=0, engine='openpyxl')
+        df = pd.concat([df, run_df], ignore_index=True)
+    if triv.bike_tgt_percent > 0:
+        bike_df = pd.read_excel(bike_file, index_col=0, engine='openpyxl')
+        df = pd.concat([df, bike_df], ignore_index=True)
+    if triv.swim_tgt_percent > 0:
+        swim_df = pd.read_excel(swim_file, index_col=0, engine='openpyxl')
+        df = pd.concat([df, swim_df], ignore_index=True)
 
-    bike_df = bike_df[bike_df['TSS'] != 0]
-    bike_df = bike_df[bike_df['TSS'].notnull()]
+    df = df[df['TSS'] != 0]
+    df = df[df['TSS'].notnull()]
 
-    run_wkday_df = run_df[run_df['Duration/Distance'] <= triv.max_time_weekend]
-    bike_wkday_df = bike_df[bike_df['Duration/Distance'] <= triv.max_time_weekend]
+    wkend_wts_df = df[df['Duration'] <= triv.max_time_weekend]
+    wkend_wts_df = wkend_wts_df[wkend_wts_df['TSS'] <= triv.max_time_weekend]
 
-    run_wkday_df = run_wkday_df[run_wkday_df['TSS'] <= triv.max_time_weekend]
-    bike_wkday_df = bike_wkday_df[bike_wkday_df['TSS'] <= triv.max_tss_weekend]
-
-    wkend_wts_df = pd.concat([run_wkday_df, bike_wkday_df], ignore_index=True)
-
-    run_wkend_df = run_df[run_df['Duration/Distance'] <= triv.max_time_weekday]
-    bike_wkend_df = bike_df[bike_df['Duration/Distance'] <= triv.max_time_weekday]
-
-    run_wkend_df = run_wkend_df[run_wkend_df['TSS'] <= triv.max_time_weekday]
-    bike_wkend_df = bike_wkend_df[bike_wkend_df['TSS'] <= triv.max_tss_weekday]
-
-    wkday_wts_df = pd.concat([run_wkend_df, bike_wkend_df], ignore_index=True)
+    wkday_wts_df = df[df['Duration'] <= triv.max_time_weekday]
+    wkday_wts_df = wkday_wts_df[wkday_wts_df['TSS'] <= triv.max_time_weekday]
 
     return wkend_wts_df, wkday_wts_df
 
-def calculate_plan_score(wkt_plan_tss=0.0,
-                         wkt_plan_duration=0.0,
-                         wkt_plan_bike_dur=0.0,
-                         wkt_plan_run_dur=0.0,
-                         wkt_plan_bike_tss=0.0,
-                         wkt_plan_run_tss=0.0,
-                         wkt_bike_high_dur=0.0,
-                         wkt_bike_low_dur=0.0,
-                         wkt_run_high_dur=0.0,
-                         wkt_run_low_dur=0.0,
-                         wkt_high_dur=0.0,
-                         wkt_low_dur=0.0,
-                         verbose=False
-                         ):
-    tot_weights = 5.0
-    tot_tss_weight = 1.0 / tot_weights  # Overall TSS score weight
-    tgt_weight = 1.0 / tot_weights  # Overall 80/20 score weight
-    # rbs = run, bike, swim
-    rbs_dur_split_weight = 1.0 / tot_weights  # RBS Duration 2/3-1/3 score weight
-    rbs_tss_split_weight = 1.0 / tot_weights  # RBS TSS 1/3-1/3 score weight
-    rbs_dur_tgt_split_weight = 1.0 / tot_weights  # RBS Duration is 80/20 score weight (i.e. 80% of
-    dist_metric_exponential = 1  # Basically how much to punish values which are far away from the target, better to have everything off by 0.1 than everything spot on and one off by 0.08
 
-    tss_score = 1.0 - abs(1.0 - wkt_plan_tss / triv.target_tss)
-    if verbose: print('TSS Score:', round(tss_score, 2), 'TSS:', wkt_plan_tss)
-    tss_score *= tot_tss_weight
+def calculate_plan_score(wkt, verbose=False):
+    def calculate_sport_scores(wkt, exer):
+        exer.dur_percent = exer.dur / wkt.duration
+        spt_dur_tgt_score = 1.0 - abs(1.0 - exer.dur_percent / exer.tgt_percent)
+        if verbose: print(exer.name, 'Dur % TGT Score:', round(spt_dur_tgt_score, 2), exer.name, 'Dur %:',
+                          round(exer.dur_percent, 2), 'Total', exer.name, 'Dur:', exer.dur)
 
-    # ----------------------------------------------
-    high_dur_percent = wkt_high_dur / wkt_plan_duration
-    low_dur_percent = wkt_low_dur / wkt_plan_duration
+        spt_dur_tgt_score *= triv.rbs_dur_split_weight * exer.tgt_percent
 
-    high_tgt_score = 1.0 - abs(1.0 - high_dur_percent / triv.high_tgt)
-    low_tgt_score = 1.0 - abs(1.0 - low_dur_percent / triv.low_tgt)
-    if verbose: print('High TGT Score:', round(high_tgt_score, 2), 'High %:', round(high_dur_percent, 2))
-    if verbose: print('Low TGT Score:', round(low_tgt_score, 2), 'Low %:', round(low_dur_percent, 2))
+        exer.tss_percent = exer.tss / wkt.total_tss
+        spt_tss_tgt_score = 1.0 - abs(1.0 - exer.tss_percent / exer.tgt_percent)
+        if verbose: print(exer.name, 'TSS % TGT Score:', round(spt_tss_tgt_score, 2), exer.name, 'TSS %:',
+                          round(exer.tss_percent, 2), 'Total', exer.name, 'TSS:', exer.tss)
+        spt_tss_tgt_score *= triv.rbs_tss_split_weight * exer.tgt_percent
 
-    high_tgt_score *= (tgt_weight / 2)
-    low_tgt_score *= (tgt_weight / 2)
-    tgt_score = high_tgt_score + low_tgt_score
+        exer.high_dur_percent = ((0.0 or exer.high_dur) / exer.dur or 0.0)
+        exer.low_dur_percent = exer.low_dur / exer.dur
 
-    # ----------------------------------------------
-    run_dur_percent = wkt_plan_run_dur / wkt_plan_duration
-    bike_dur_percent = wkt_plan_bike_dur / wkt_plan_duration
+        spt_high_tgt_score = 1.0 - abs(1.0 - exer.high_dur_percent / triv.high_tgt)
+        spt_low_tgt_score = 1.0 - abs(1.0 - exer.low_dur_percent / triv.low_tgt)
 
-    run_dur_tgt_score = 1.0 - abs(1.0 - run_dur_percent / triv.run_tgt_percent)
-    bike_dur_tgt_score = 1.0 - abs(1.0 - bike_dur_percent / triv.bike_tgt_percent)
-    if verbose: print('Run Dur % TGT Score:', round(run_dur_tgt_score, 2), 'Run Dur %:', round(run_dur_percent, 2),
-                      'Total Run Dur:', wkt_plan_run_dur)
-    if verbose: print('Bike Dur % TGT Score:', round(bike_dur_tgt_score, 2), 'Bike Dur %:', round(bike_dur_percent, 2),
-                      'Total Bike Dur:', wkt_plan_bike_dur)
-    run_dur_tgt_score *= rbs_dur_split_weight / 2
-    bike_dur_tgt_score *= rbs_dur_split_weight / 2
+        if verbose: print(exer.name, 'High TGT Score:', round(spt_high_tgt_score, 2), exer.name, 'High %:',
+                          round(exer.high_dur_percent, 2))
+        if verbose: print(exer.name, 'Low TGT Score:', round(spt_low_tgt_score, 2), exer.name, 'Low %:',
+                          +    round(exer.low_dur_percent, 2))
+        dur_split_tgt_score = (
+                                      spt_high_tgt_score + spt_low_tgt_score) / 2 * exer.tgt_percent * triv.rbs_dur_tgt_split_weight
 
-    dur_tgt_score = run_dur_tgt_score + bike_dur_tgt_score
+        exer.zone_3_percent = exer.zone_3 / exer.high_dur
+        if pd.isna(exer.zone_3_percent): exer.zone_3_percent = 0.0
+        spt_z3_tgt_score = 1.0 - abs(1.0 - exer.zone_3_percent / triv.zone_3_tgt)
+        exer.zone_4_percent = exer.zone_4 / exer.high_dur
+        if pd.isna(exer.zone_4_percent): exer.zone_4_percent = 0.0
+        spt_z4_tgt_score = 1.0 - abs(1.0 - exer.zone_4_percent / triv.zone_4_tgt)
+        exer.zone_5_percent = exer.zone_5 / exer.high_dur
+        if pd.isna(exer.zone_5_percent): exer.zone_5_percent = 0.0
+        spt_z5_tgt_score = 1.0 - abs(1.0 - exer.zone_5_percent / triv.zone_5_tgt)
 
-    # ----------------------------------------------
-    run_tss_percent = wkt_plan_run_tss / wkt_plan_tss
-    bike_tss_percent = wkt_plan_bike_tss / wkt_plan_tss
+        if verbose: print(exer.name, 'Zone 3 TGT Score:', round(spt_z3_tgt_score, 2), exer.name, 'Zone 3 %:',
+                          round(exer.zone_3_percent, 2))
+        if verbose: print(exer.name, 'Zone 4 TGT Score:', round(spt_z4_tgt_score, 2), exer.name, 'Zone 4 %:',
+                          +    round(exer.zone_4_percent, 2))
+        if verbose: print(exer.name, 'Zone 5 TGT Score:', round(spt_z5_tgt_score, 2), exer.name, 'Zone 5 %:',
+                          +    round(exer.zone_5_percent, 2))
+        high_split_tgt_score = (
+                                       spt_z3_tgt_score + spt_z4_tgt_score + spt_z5_tgt_score) / 3 * exer.tgt_percent * triv.high_zone_split_weight
 
-    run_tss_tgt_score = 1.0 - abs(1.0 - run_tss_percent / triv.run_tgt_percent)
-    bike_tss_tgt_score = 1.0 - abs(1.0 - bike_tss_percent / triv.bike_tgt_percent)
-    if verbose: print('Run TSS % TGT Score:', round(run_tss_tgt_score, 2), 'Run TSS %:', round(run_tss_percent, 2),
-                      'Total Run TSS:', wkt_plan_run_tss)
-    if verbose: print('Bike TSS % TGT Score:', round(bike_tss_tgt_score, 2), 'Bike TSS %:', round(bike_tss_percent, 2),
-                      'Total Bike TSS:', wkt_plan_bike_tss)
-    run_tss_tgt_score *= rbs_tss_split_weight / 2
-    bike_tss_tgt_score *= rbs_tss_split_weight / 2
+        wkt.tss_tgt_score += spt_tss_tgt_score
+        wkt.dur_tgt_score += spt_dur_tgt_score
+        wkt.dur_split_tgt_score += dur_split_tgt_score
+        wkt.high_split_tgt_score += high_split_tgt_score
 
-    tss_tgt_score = run_tss_tgt_score + bike_tss_tgt_score
+    if triv.tot_tss_weight > 0.0:
+        wkt.tss_score = 1.0 - abs(1.0 - wkt.total_tss / triv.target_tss)
+        if verbose: print('TSS Score:', round(wkt.tss_score, 2), 'TSS:', wkt.total_tss)
+        wkt.tss_score *= triv.tot_tss_weight
 
     # ----------------------------------------------
-    run_high_dur_percent = wkt_run_high_dur / wkt_plan_run_dur
-    run_low_dur_percent = wkt_run_low_dur / wkt_plan_run_dur
+    if triv.tgt_weight > 0.0:
+        wkt.high_dur_percent = wkt.high_dur / wkt.duration
+        wkt.low_dur_percent = wkt.low_dur / wkt.duration
 
-    bike_high_dur_percent = wkt_bike_high_dur / wkt_plan_bike_dur
-    bike_low_dur_percent = wkt_bike_low_dur / wkt_plan_bike_dur
+        wkt.high_tgt_score = 1.0 - abs(1.0 - wkt.high_dur_percent / triv.high_tgt)
+        wkt.low_tgt_score = 1.0 - abs(1.0 - wkt.low_dur_percent / triv.low_tgt)
+        if verbose: print('High TGT Score:', round(wkt.high_tgt_score, 2), 'High %:', round(wkt.high_dur_percent, 2))
+        if verbose: print('Low TGT Score:', round(wkt.low_tgt_score, 2), 'Low %:', round(wkt.low_dur_percent, 2))
 
-    run_high_tgt_score = 1.0 - abs(1.0 - run_high_dur_percent / triv.high_tgt)
-    run_low_tgt_score = 1.0 - abs(1.0 - run_low_dur_percent / triv.low_tgt)
+        wkt.tgt_score = (wkt.high_tgt_score + wkt.low_tgt_score) * triv.tgt_weight / 2
 
-    bike_high_tgt_score = 1.0 - abs(1.0 - bike_high_dur_percent / triv.high_tgt)
-    bike_low_tgt_score = 1.0 - abs(1.0 - bike_low_dur_percent / triv.low_tgt)
+    # ----------------------------------------------
+    if triv.run_tgt_percent > 0.0:
+        calculate_sport_scores(wkt, wkt.run)
 
-    if verbose: print('Run High TGT Score:', round(run_high_tgt_score, 2), 'Run High %:',
-                      round(run_high_dur_percent, 2))
-    if verbose: print('Run Low TGT Score:', round(run_low_tgt_score, 2), 'Run Low %:', round(run_low_dur_percent, 2))
-    if verbose: print('Bike High TGT Score:', round(bike_high_tgt_score, 2), 'Bike High %:',
-                      round(bike_high_dur_percent, 2))
-    if verbose: print('Bike Low TGT Score:', round(bike_low_tgt_score, 2), 'Bike Low %:',
-                      round(bike_low_dur_percent, 2))
+    if triv.bike_tgt_percent > 0.0:
+        calculate_sport_scores(wkt, wkt.bike)
 
-    run_dur_spt_score = (run_high_tgt_score + run_low_tgt_score) / 2
-    bike_dur_spt_score = (bike_high_tgt_score + bike_low_tgt_score) / 2
+    if triv.swim_tgt_percent > 0.0:
+        calculate_sport_scores(wkt, wkt.swim)
 
-    dur_split_tgt_score = rbs_dur_tgt_split_weight * (run_dur_spt_score + bike_dur_spt_score) / 2
-
-    return round(tss_score + tgt_score + dur_tgt_score + tss_tgt_score + dur_split_tgt_score,
-                 4) * 100, high_dur_percent, low_dur_percent, run_dur_percent, bike_dur_percent, run_tss_percent, bike_tss_percent, run_high_dur_percent, run_low_dur_percent, bike_high_dur_percent, bike_low_dur_percent
-
+    # ----------------------------------------------
+    wkt.score = round(
+            wkt.tss_score + wkt.tgt_score + wkt.dur_tgt_score + wkt.tss_tgt_score + wkt.dur_split_tgt_score + wkt.high_split_tgt_score,
+            4) * 100
 
 
 # 10000 take 30 seconds
-def generate_random_workout(wkend_wts_df, wkday_wts_df, num_gen, verbose=False):
-    wkt_dict = {'Workouts'       : [],
-                'Score'          : [],
-                'Total Duration' : [],
-                'Total TSS'      : [],
-                '% Bike Dur'     : [],
-                '% Run Dur'      : [],
-                '% High Dur'     : [],
-                '% Low Dur'      : [],
-                '% Run TSS'      : [],
-                '% Bike TSS'     : [],
-                '% High Run Dur' : [],
-                '% Low Run Dur'  : [],
-                '% High Bike Dur': [],
-                '% Low Bike Dur' : [], }
+def generate_random_workout_plan(wkend_wts_df, wkday_wts_df, num_gen, verbose=False):
+    wkt_dict = {'Workouts'        : [],
+                'Score'           : [],
+                'Total Duration'  : [],
+                'Total TSS'       : [],
+                '% Run Dur'       : [],
+                '% Bike Dur'      : [],
+                '% Swim Dur'      : [],
+                '% High Dur'      : [],
+                '% Low Dur'       : [],
+                '% Run TSS'       : [],
+                '% Bike TSS'      : [],
+                '% Swim TSS'      : [],
+                '% High Run Dur'  : [],
+                '% Low Run Dur'   : [],
+                'Z3/4/5 Run Dist' : [],
+                '% High Bike Dur' : [],
+                '% Low Bike Dur'  : [],
+                'Z3/4/5 Bike Dist': [],
+                '% High Swim Dur' : [],
+                '% Low Swim Dur'  : [],
+                'Z3/4/5 Swim Dist': [], }
     wkts_df = pd.DataFrame(wkt_dict)
 
     for i in range(num_gen):
+        if verbose: print('-----------------------------------')
+        wkt = workout()
         # We will always want at least one run and one bike on weekdays
-        run_wkday = wkday_wts_df[wkday_wts_df['Type'] == 'Run'].sample()
-        bike_wkday = wkday_wts_df[wkday_wts_df['Type'] == 'Bike'].sample()
+        wkts = pd.DataFrame()
+        tot_wkts = 0
+        if triv.run_tgt_percent > 0:
+            wkts = wkts.append(wkday_wts_df[wkday_wts_df['Type'] == 'Run'].sample())
+            tot_wkts += 1
+            wkt.run.tgt_percent = triv.run_tgt_percent
+        if triv.bike_tgt_percent > 0:
+            wkts = wkts.append(wkday_wts_df[wkday_wts_df['Type'] == 'Bike'].sample())
+            tot_wkts += 1
+            wkt.bike.tgt_percent = triv.bike_tgt_percent
+        if triv.swim_tgt_percent > 0:
+            wkts = wkts.append(wkday_wts_df[wkday_wts_df['Type'] == 'Swim'].sample())
+            tot_wkts += 1
+            wkt.swim.tgt_percent = triv.swim_tgt_percent
 
         # Get a random workout for every weekday, shuffle them up and assign
-        wkday_wkts = wkday_wts_df.sample(len(triv.weekdays) - 2)
-        wkday_wkts = pd.concat([run_wkday, bike_wkday, wkday_wkts], ignore_index=True)
+        wkday_wkts = wkday_wts_df.sample(len(triv.weekdays) - tot_wkts)
+        wkday_wkts = pd.concat([wkts, wkday_wkts], ignore_index=True)
         wkday_wkts = wkday_wkts.sample(frac=1)
         wkday_wkts['Weekday'] = triv.weekdays
         wkday_wkts['TSS/Min'] = wkday_wkts[triv.tss].div(triv.max_time_weekday)
@@ -171,28 +173,23 @@ def generate_random_workout(wkend_wts_df, wkday_wts_df, num_gen, verbose=False):
         wkts = pd.concat([wkday_wkts, wkend_wkts], ignore_index=True)
         del wkts['Description']
 
-        wkt_plan_tss = wkts[triv.tss].sum()
-        wkt_plan_duration = wkts[triv.duration].sum()
-        wkt_high_dur = wkts[triv.high_duration].sum()
-        wkt_high_pct = wkt_high_dur / wkt_plan_duration
+        wkt.total_tss = wkts[triv.tss].sum()
+        wkt.duration = wkts[triv.duration].sum()
+        wkt.high_dur = wkts[triv.high_duration_head].sum()
+        wkt.high_pct = wkt.high_dur / wkt.duration
 
-        bike_wkts = wkts.loc[wkts['Type'] == 'Bike']
-        wkt_plan_bike_dur = bike_wkts[triv.duration].sum()
-        bike_dur_percent = wkt_plan_bike_dur / wkt_plan_duration
         cnt = 0
 
         # TODO: Check Bike Condition
         # TODO: Allow for Bricks
-        while wkt_plan_tss < triv.target_tss * 0.95 \
-                or wkt_plan_tss > triv.target_tss * 1.05 \
-                or wkt_high_pct < triv.high_tgt * 0.75 \
-                or wkt_high_pct > triv.high_tgt * 1.25:
-            # or bike_dur_percent < bike_tgt * 0.75 \
-            # or bike_dur_percent > bike_tgt * 1.25:
+        while wkt.total_tss < triv.target_tss * 0.95 \
+                or wkt.total_tss > triv.target_tss * 1.05 \
+                or wkt.high_pct < triv.high_tgt * 0.75 \
+                or wkt.high_pct > triv.high_tgt * 1.25:
             replace_day = ''
-            if wkt_plan_tss < triv.target_tss * 0.95 or wkt_high_pct < triv.high_tgt * 0.75:
+            if wkt.total_tss < triv.target_tss * 0.95 or wkt.high_pct < triv.high_tgt * 0.75:
                 replace_day = wkts[['TSS/Min']].idxmin().tolist()[0]
-            elif wkt_plan_tss > triv.target_tss * 1.05 or wkt_high_pct > triv.high_tgt * 1.25:
+            elif wkt.total_tss > triv.target_tss * 1.05 or wkt.high_pct > triv.high_tgt * 1.25:
                 replace_day = wkts[['TSS/Min']].idxmax().tolist()[0]
             # elif bike_dur_percent < bike_tgt * 0.75:
             # Could replace the smallest bike workout with a longer one
@@ -211,14 +208,11 @@ def generate_random_workout(wkend_wts_df, wkday_wts_df, num_gen, verbose=False):
             wkts = wkts.drop(replace_day)
             wkts = wkts.append(replace_workout, ignore_index=True)
 
-            wkt_plan_tss = wkts[triv.tss].sum()
-            wkt_plan_duration = wkts[triv.duration].sum()
-            wkt_high_dur = wkts[triv.high_duration].sum()
-            wkt_high_pct = wkt_high_dur / wkt_plan_duration
+            wkt.total_tss = wkts[triv.tss].sum()
+            wkt.duration = wkts[triv.duration].sum()
+            wkt.high_dur = wkts[triv.high_duration_head].sum()
+            wkt.high_pct = wkt.high_dur / wkt.duration
 
-            bike_wkts = wkts.loc[wkts['Type'] == 'Bike']
-            wkt_plan_bike_dur = bike_wkts[triv.duration].sum()
-            bike_dur_percent = wkt_plan_bike_dur / wkt_plan_duration
             cnt += 1
             if cnt > 25:  # If after 25 changes it doesn't work, just break
                 break
@@ -234,62 +228,91 @@ def generate_random_workout(wkend_wts_df, wkday_wts_df, num_gen, verbose=False):
         # if greater than TSS, find day with highest TSS/hour
         #
 
-        wkt_plan_tss = wkts[triv.tss].sum()
-        wkt_plan_duration = wkts[triv.duration].sum()
-        wkt_high_dur = wkts[triv.high_duration].sum()
-        wkt_high_pct = wkt_high_dur / wkt_plan_duration
+        wkt.total_tss = wkts[triv.tss].sum()
+        wkt.duration = wkts[triv.duration].sum()
+        wkt.high_dur = wkts[triv.high_duration_head].sum()
+        wkt.high_pct = wkt.high_dur / wkt.duration
 
-        bike_wkts = wkts.loc[wkts[triv.type] == 'Bike']
-        wkt_plan_bike_dur = bike_wkts[triv.duration].sum()
-        bike_dur_percent = wkt_plan_bike_dur / wkt_plan_duration
         # print(wkts)
 
-        if triv.target_tss * 0.95 < wkt_plan_tss < triv.target_tss * 1.05 \
-                and triv.high_tgt * 0.75 < wkt_high_pct < triv.high_tgt * 1.25 \
-                and triv.bike_tgt * 0.75 < bike_dur_percent < triv.bike_tgt * 1.25:
-            wkt_plan = wkts[triv.code].to_list()
+        if triv.target_tss * 0.95 < wkt.total_tss < triv.target_tss * 1.05 \
+                and triv.high_tgt * 0.75 < wkt.high_pct < triv.high_tgt * 1.25 and wkt.high_dur > 0.0:
+            # and triv.bike_tgt_percent * 0.75 < bike_dur_percent < triv.bike_tgt_percent * 1.25:
+
+            wkt.plan = wkts[triv.code].to_list()
+            wkt.low_dur = 0.0
 
             # Sum Run stats
-            run_wkts = wkts.loc[wkts[triv.type] == 'Run']
-            wkt_plan_run_dur = run_wkts[triv.duration].sum()
-            wkt_run_high_dur = run_wkts[triv.high_duration].sum()
-            wkt_run_low_dur = run_wkts[triv.low_duration].sum()
-            wkt_plan_run_tss = run_wkts[triv.tss].sum()
+            if triv.run_tgt_percent > 0.0:
+                run_wkts = wkts.loc[wkts[triv.type] == 'Run']
+                wkt.run.dur = run_wkts[triv.duration].sum()
+                wkt.run.high_dur = run_wkts[triv.high_duration_head].sum()
+                wkt.run.zone_3 = run_wkts[triv.zone_3].sum()
+                wkt.run.zone_4 = run_wkts[triv.zone_4].sum()
+                wkt.run.zone_5 = run_wkts[triv.zone_5].sum()
+                wkt.run.low_dur = run_wkts[triv.low_duration_head].sum()
+                wkt.run.tss = run_wkts[triv.tss].sum()
+                wkt.low_dur += wkt.run.low_dur
 
             # Sum Bike stats
-            wkt_bike_high_dur = bike_wkts[triv.high_duration].sum()
-            wkt_bike_low_dur = bike_wkts[triv.low_duration].sum()
-            wkt_plan_bike_tss = bike_wkts[triv.tss].sum()
-            wkt_low_dur = wkt_run_low_dur + wkt_bike_low_dur
+            if triv.bike_tgt_percent > 0.0:
+                bike_wkts = wkts.loc[wkts[triv.type] == 'Bike']
+                wkt.bike.dur = bike_wkts[triv.duration].sum()
+                wkt.bike.high_dur = bike_wkts[triv.high_duration_head].sum()
+                wkt.bike.low_dur = bike_wkts[triv.low_duration_head].sum()
+                wkt.bike.zone_3 = bike_wkts[triv.zone_3].sum()
+                wkt.bike.zone_4 = bike_wkts[triv.zone_4].sum()
+                wkt.bike.zone_5 = bike_wkts[triv.zone_5].sum()
+                wkt.bike.tss = bike_wkts[triv.tss].sum()
+                wkt.low_dur += wkt.bike.low_dur
 
-            wkt_score, high_dur_percent, low_dur_percent, run_dur_percent, bike_dur_percent, run_tss_percent, bike_tss_percent, run_high_dur_percent, run_low_dur_percent, bike_high_dur_percent, bike_low_dur_percent = calculate_plan_score(
-                    wkt_plan_tss,
-                    wkt_plan_duration,
-                    wkt_plan_bike_dur,
-                    wkt_plan_run_dur,
-                    wkt_plan_bike_tss,
-                    wkt_plan_run_tss,
-                    wkt_bike_high_dur,
-                    wkt_bike_low_dur,
-                    wkt_run_high_dur,
-                    wkt_run_low_dur,
-                    wkt_high_dur,
-                    wkt_low_dur,
-                    verbose=verbose
-            )
-            wkt_dict = {'Workouts'       : wkt_plan,
-                        'Score'          : wkt_score,
-                        'Total Duration' : wkt_plan_duration,
-                        'Total TSS'      : wkt_plan_tss,
-                        '% Bike Dur'     : round(bike_dur_percent, 2),
-                        '% Run Dur'      : round(run_dur_percent, 2),
-                        '% High Dur'     : round(high_dur_percent, 2),
-                        '% Low Dur'      : round(low_dur_percent, 2),
-                        '% Run TSS'      : round(run_tss_percent, 2),
-                        '% Bike TSS'     : round(bike_tss_percent, 2),
-                        '% High Run Dur' : round(run_high_dur_percent, 2),
-                        '% Low Run Dur'  : round(run_low_dur_percent, 2),
-                        '% High Bike Dur': round(bike_high_dur_percent, 2),
-                        '% Low Bike Dur' : round(bike_low_dur_percent, 2)}
+            # Sum Swim stats
+            if triv.swim_tgt_percent > 0.0:
+                swim_wkts = wkts.loc[wkts[triv.type] == 'Swim']
+                wkt.swim.dur = swim_wkts[triv.duration].sum()
+                wkt.swim.high_dur = swim_wkts[triv.high_duration_head].sum()
+                wkt.swim.low_dur = swim_wkts[triv.low_duration_head].sum()
+                wkt.swim.zone_3 = swim_wkts[triv.zone_3].sum()
+                wkt.swim.zone_4 = swim_wkts[triv.zone_4].sum()
+                wkt.swim.zone_5 = swim_wkts[triv.zone_5].sum()
+                wkt.swim.tss = swim_wkts[triv.tss].sum()
+                wkt.low_dur += wkt.swim.low_dur
+
+            calculate_plan_score(wkt, verbose=verbose)
+
+            wkt_dict = {'Workouts'        : wkt.plan,
+                        'Score'           : wkt.score,
+                        'Total Duration'  : wkt.duration,
+                        'Total TSS'       : wkt.total_tss,
+                        '% Bike Dur'      : round(wkt.bike.dur_percent, 2),
+                        '% Run Dur'       : round(wkt.run.dur_percent, 2),
+                        '% Swim Dur'      : round(wkt.swim.dur_percent, 2),
+                        '% High Dur'      : round(wkt.high_dur_percent, 2),
+                        '% Low Dur'       : round(wkt.low_dur_percent, 2),
+                        '% Run TSS'       : round(wkt.run.tss_percent, 2),
+                        '% Bike TSS'      : round(wkt.bike.tss_percent, 2),
+                        '% Swim TSS'      : round(wkt.swim.tss_percent, 2),
+                        '% High Run Dur'  : round(wkt.run.high_dur_percent, 2),
+                        '% Low Run Dur'   : round(wkt.run.low_dur_percent, 2),
+                        'Z3/4/5 Run Dist' : f"{int(100 * wkt.run.zone_3_percent)}/{int(100 * wkt.run.zone_4_percent)}/{int(100 * wkt.run.zone_5_percent)}",
+                        '% High Bike Dur' : round(wkt.bike.high_dur_percent, 2),
+                        '% Low Bike Dur'  : round(wkt.bike.low_dur_percent, 2),
+                        'Z3/4/5 Bike Dist': f"{int(100 * wkt.bike.zone_3_percent)}/{int(100 * wkt.bike.zone_4_percent)}/{int(100 * wkt.bike.zone_5_percent)}",
+                        '% High Swim Dur' : round(wkt.swim.high_dur_percent, 2),
+                        '% Low Swim Dur'  : round(wkt.swim.low_dur_percent, 2),
+                        'Z3/4/5 Swim Dist': f"{int(100 * wkt.swim.zone_3_percent)}/{int(100 * wkt.swim.zone_4_percent)}/{int(100 * wkt.swim.zone_5_percent)}",
+                        }
             wkts_df = wkts_df.append(wkt_dict, ignore_index=True)
+
+    if triv.run_tgt_percent == 0.0:
+        wkts_df = wkts_df.drop(columns=['% Run Dur', '% Run TSS', '% High Run Dur', '% Low Run Dur', 'Z3/4/5 Run Dist'])
+
+    if triv.bike_tgt_percent == 0.0:
+        wkts_df = wkts_df.drop(
+            columns=['% Bike Dur', '% Bike TSS', '% High Bike Dur', '% Low Bike Dur', 'Z3/4/5 Bike Dist'])
+
+    if triv.swim_tgt_percent == 0.0:
+        wkts_df = wkts_df.drop(
+            columns=['% Swim Dur', '% Swim TSS', '% High Swim Dur', '% Low Swim Dur', 'Z3/4/5 Swim Dist'])
+
     return wkts_df
