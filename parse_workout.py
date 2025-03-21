@@ -76,23 +76,58 @@ def plot_workout(distances, zones):
         print("No data to plot.")
         return
     
+    # Define color mapping for zones
+    zone_colors = {
+        1: 'blue',    # Warmup/Cooldown
+        2: 'green',   # Zone 2
+        3: 'orange',  # Zone 3
+        4: 'red',     # Zone 4
+        5: 'purple'   # Zone 5 (unused here but included)
+    }
+    
+    # Calculate total distance per zone for the legend
+    zone_distances = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    for dist_pair, zone in zip(distances, zones):
+        zone_distances[zone] += dist_pair[1]  # Add distance to the zone
+    
     plt.figure(figsize=(10, 6))  # Wider figure for clarity
     current_x = 0  # Track position for non-overlapping steps
     
+    # Plot each step
     for i, (dist_pair, zone) in enumerate(zip(distances, zones)):
-        x = [current_x, current_x + dist_pair[1]]  # Start at current_x, end at current_x + distance
+        x = [current_x, current_x + dist_pair[1]]  # Start and end of this step
         y = [zone, zone]  # Constant zone height
-        plt.step(x, y, where='post', label=f'Zone {zone}' if i == 0 else "")
-        # Annotate the distance at the end of the step
-        plt.annotate(f'{dist_pair[1]:.2f} km', (x[1], y[1]), textcoords="offset points", xytext=(0, 10), ha='center')
-        current_x = x[1]  # Move to the end of this step for the next one
+        color = zone_colors[zone]  # Get color for this zone
+        
+        # Plot step with black vertical lines and zone-specific color
+        plt.step(x, y, where='pre', color='black', linewidth=1.5)  # Black transitions
+        plt.plot(x, y, color=color, label=f'Zone {zone}' if i == 0 or zones[i-1] != zone else None)
+        
+        # Fill the area under the step
+        plt.fill_between(x, 0, y, color=color, alpha=0.3)
+        
+        # Center the annotation along the step
+        mid_x = (x[0] + x[1]) / 2  # Midpoint of the step
+        plt.annotate(f'{dist_pair[1]:.2f} km', (mid_x, zone), textcoords="offset points", 
+                     xytext=(0, 10), ha='center', fontsize=10)
+        
+        current_x = x[1]  # Move to the end of this step
+    
+    # Customize legend with distances
+    legend_labels = [f'Zone {zone}: {zone_distances[zone]:.2f} km' for zone in sorted(zone_distances.keys()) if zone_distances[zone] > 0]
+    plt.legend(labels=legend_labels, loc='upper right')
+    
+    # Add total distance below the plot
+    total_distance = sum(dist_pair[1] for dist_pair in distances)
+    plt.text(0.5, -0.1, f'Total Distance: {total_distance:.2f} km', ha='center', va='center', 
+             transform=plt.gca().transAxes, fontsize=12)
     
     plt.xlabel('Distance (km)')
     plt.ylabel('Zone')
     plt.title('Workout Intensity Zones with Per-Zone Distance')
     plt.yticks([1, 2, 3, 4, 5])  # Zones 1-5
     plt.grid(True)
-    plt.legend()
+    plt.tight_layout()  # Adjust layout to fit total distance text
     plt.show()
 
 #file_path = 'RHR9.FIT'
