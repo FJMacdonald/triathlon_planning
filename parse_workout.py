@@ -62,7 +62,7 @@ def extract_workout_data(file_path):
                 
                 distances.append([0, distance / 1000])  # Convert to km
                 zones.append(zone)
-                
+        print(distances)       
         return distances, zones
     
     except Exception as e:
@@ -95,7 +95,8 @@ def plot_workout(distances, zones):
     plt.legend()
     plt.show()
 
-file_path = 'RHR9.FIT'
+#file_path = 'RHR9.FIT'
+file_path = 'RLSP5.fit'
 # read_fit_file(file_path)
 distances, zones = extract_workout_data(file_path)
 plot_workout(distances, zones)
