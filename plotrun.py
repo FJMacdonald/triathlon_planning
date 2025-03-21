@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 from fitparse import FitFile
 import os
 
+
 def extract_run_data(file_path):
     distances = []
-    speeds = []  # We'll use speed to calculate pace
+    speeds = []
     
     try:
         if not os.path.exists(file_path):
@@ -13,14 +14,19 @@ def extract_run_data(file_path):
         
         with open(file_path, 'rb') as f:
             fitfile = FitFile(f)
-            for record in fitfile.get_messages('record'):
-                distance = record.get_value('distance')  # meters
-                speed = record.get_value('enhanced_speed') or record.get_value('speed')  # m/s
+            for i, record in enumerate(fitfile.get_messages('record')):
+                distance = record.get_value('distance')
+                speed = record.get_value('enhanced_speed') or record.get_value('speed')
                 
-                if distance is not None and speed is not None and speed > 0:  # Avoid division by zero
-                    distances.append(distance / 1000)  # Convert to km
+                if distance is not None and speed is not None and speed > 0:
+                    distances.append(distance / 1000)
                     speeds.append(speed)
-                
+                    if i < 5:
+                        print(f"Record {i}: distance={distance} m, speed={speed} m/s")
+                if speed > 10:
+                    print(f"Warning: Unrealistic speed: {speed} m/s at distance {distance} m")
+    
+        print(f"Extracted speeds (first 5): {speeds[:5]}")
         return distances, speeds
     
     except Exception as e:
@@ -32,41 +38,47 @@ def plot_run(distances, speeds):
         print("No data to plot.")
         return
     
-    # Calculate pace in minutes per kilometer
-    paces = [60 / (speed * 3.6) for speed in speeds]  # min/km
+    paces = [60 / (speed * 3.6) for speed in speeds]
+    paces_clipped = [min(p, 8) for p in paces]  # Cap at 8:00
     
-    plt.figure(figsize=(12, 6))
+    print(f"Speeds (first 5): {speeds[:5]}")
+    print(f"Paces (min/km): {[f'{int(p)}:{int((p % 1) * 60):02d}' for p in paces[:5]]}")
+    print(f"Clipped paces: {[f'{int(p)}:{int((p % 1) * 60):02d}' for p in paces_clipped[:5]]}")
     
-    # Plot pace over distance
-    plt.plot(distances, paces, color='blue', label='Pace')
-    plt.fill_between(distances, 0, paces, color='blue', alpha=0.2)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(distances, paces_clipped, color='blue', label='Pace')
+    ax.fill_between(distances, 8, paces_clipped, color='blue', alpha=0.2)
     
-    # Convert pace to min:sec for y-axis labels
-    pace_min = [int(p) for p in paces]
-    pace_sec = [int((p % 1) * 60) for p in paces]
-    y_ticks = [p for p in range(int(min(paces)), int(max(paces)) + 1)]  # Whole minute range
-    y_labels = [f"{m}:00" for m in y_ticks]  # Format as MM:00
+    min_pace = min(paces_clipped)
+    y_ticks = [p for p in range(int(min_pace), 9)]
+    y_labels = [f"{m}:00" for m in y_ticks]
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels(y_labels)
+    ax.invert_yaxis()
     
-    plt.yticks(y_ticks, y_labels)
-    plt.gca().invert_yaxis()  # Invert so slowest (highest) pace is at bottom
+    def format_coord(x, y):
+        pace_min = int(y)
+        pace_sec = int((y % 1) * 60)
+        return f'x={x:.2f} km, y={pace_min}:{pace_sec:02d} min/km'
+    ax.format_coord = format_coord
     
     total_distance = distances[-1] - distances[0]
-    avg_pace = sum(paces) / len(paces)
+    avg_pace = sum(paces) / len(paces)  # Unclipped avg
     avg_min = int(avg_pace)
     avg_sec = int((avg_pace % 1) * 60)
-    plt.text(0.5, -0.15, f'Total Distance: {total_distance:.2f} km\nAvg Pace: {avg_min}:{avg_sec:02d} min/km', 
-             ha='center', va='center', transform=plt.gca().transAxes, fontsize=12)
+    print(f"Calculated avg pace: {avg_min}:{avg_sec:02d}")
     
-    plt.xlabel('Distance (km)')
-    plt.ylabel('Pace (min:sec/km)')
-    plt.title('Run Pace Over Distance')
-    plt.grid(True)
-    plt.legend(loc='upper right')
+    ax.text(0.5, -0.15, f'Total Distance: {total_distance:.2f} km\nAvg Pace: {avg_min}:{avg_sec:02d} min/km', 
+            ha='center', va='center', transform=ax.transAxes, fontsize=12)
+    
+    ax.set_xlabel('Distance (km)')
+    ax.set_ylabel('Pace (min:sec/km)')
+    ax.set_title('Run Pace Over Distance')
+    ax.grid(True)
+    ax.legend(loc='upper right')
     plt.tight_layout()
     plt.show()
 
-# Usage
 file_path = 'morning_run.fit'
 distances, speeds = extract_run_data(file_path)
 plot_run(distances, speeds)
-
