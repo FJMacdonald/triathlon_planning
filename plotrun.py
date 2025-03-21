@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 from fitparse import FitFile
 import os
+
 def extract_run_data(file_path):
     distances = []
-    heart_rates = []
-    timestamps = []
+    speeds = []  # We'll use speed to calculate pace
     
     try:
         if not os.path.exists(file_path):
@@ -15,68 +15,50 @@ def extract_run_data(file_path):
             fitfile = FitFile(f)
             for record in fitfile.get_messages('record'):
                 distance = record.get_value('distance')  # meters
-                hr = record.get_value('heart_rate')  # bpm
-                timestamp = record.get_value('timestamp')
+                speed = record.get_value('enhanced_speed') or record.get_value('speed')  # m/s
                 
-                if distance is not None and hr is not None and timestamp is not None:
+                if distance is not None and speed is not None and speed > 0:  # Avoid division by zero
                     distances.append(distance / 1000)  # Convert to km
-                    heart_rates.append(hr)
-                    timestamps.append(timestamp)
+                    speeds.append(speed)
                 
-        return distances, heart_rates
+        return distances, speeds
     
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, None
 
-def plot_run(distances, heart_rates):
-    if not distances or not heart_rates:
+def plot_run(distances, speeds):
+    if not distances or not speeds:
         print("No data to plot.")
         return
     
-    # Estimate zones based on heart rate (assuming max HR = 200, adjust as needed)
-    max_hr = 200  # Placeholder; replace with your actual max HR if known
-    zones = [min(5, max(1, int(hr / max_hr * 5) + 1)) for hr in heart_rates]
-    zone_colors = {1: 'blue', 2: 'green', 3: 'orange', 4: 'red', 5: 'purple'}
+    # Calculate pace in minutes per kilometer
+    paces = [60 / (speed * 3.6) for speed in speeds]  # Convert m/s to km/h (x3.6), then to min/km
     
-    # Calculate distance covered in each zone for legend
-    zone_distances = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    for i in range(1, len(distances)):
-        dist_diff = distances[i] - distances[i-1]
-        zone_distances[zones[i]] += dist_diff
+    plt.figure(figsize=(12, 6))
     
-    plt.figure(figsize=(12, 6))  # Wider for detailed run data
-    legend_handles = {}
+    # Plot pace over distance
+    plt.plot(distances, paces, color='blue', label='Pace')
+    plt.fill_between(distances, 0, paces, color='blue', alpha=0.2)
     
-    # Plot each segment
-    for i in range(1, len(distances)):
-        x = [distances[i-1], distances[i]]
-        y = [zones[i], zones[i]]  # Use zone as y-value
-        color = zone_colors[zones[i]]
-        
-        plt.step(x, y, where='pre', color='black', linewidth=1)
-        line, = plt.plot(x, y, color=color)
-        plt.fill_between(x, 0, y, color=color, alpha=0.3)
-        
-        if zones[i] not in legend_handles:
-            legend_handles[zones[i]] = line
-    
-    legend_labels = [f'Zone {zone}: {zone_distances[zone]:.2f} km' for zone in sorted(zone_distances.keys()) if zone_distances[zone] > 0]
-    plt.legend(handles=[legend_handles[zone] for zone in sorted(zone_distances.keys()) if zone_distances[zone] > 0], 
-               labels=legend_labels, loc='upper right')
+    # Set reasonable y-axis limits based on typical running paces
+    plt.ylim(min(paces) - 1, max(paces) + 1)  # Add padding
     
     total_distance = distances[-1] - distances[0]
-    plt.text(0.5, -0.1, f'Total Distance: {total_distance:.2f} km', ha='center', va='center', 
-             transform=plt.gca().transAxes, fontsize=12)
+    avg_pace = sum(paces) / len(paces)  # Simple average for display
+    plt.text(0.5, -0.1, f'Total Distance: {total_distance:.2f} km\nAvg Pace: {int(avg_pace)}:{int((avg_pace % 1) * 60):02d} min/km', 
+             ha='center', va='center', transform=plt.gca().transAxes, fontsize=12)
     
     plt.xlabel('Distance (km)')
-    plt.ylabel('Heart Rate Zone')
-    plt.title('Run Heart Rate Zones Over Distance')
-    plt.yticks([1, 2, 3, 4, 5])
+    plt.ylabel('Pace (min/km)')
+    plt.title('Run Pace Over Distance')
     plt.grid(True)
+    plt.legend(loc='upper right')
     plt.tight_layout()
     plt.show()
+
+# Usage
 file_path = 'morning_run.fit'
-distances, heart_rates = extract_run_data(file_path)
-plot_run(distances, heart_rates)
+distances, speeds = extract_run_data(file_path)
+plot_run(distances, speeds)
 
