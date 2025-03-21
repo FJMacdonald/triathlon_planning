@@ -33,7 +33,7 @@ def plot_run(distances, speeds):
         return
     
     # Calculate pace in minutes per kilometer
-    paces = [60 / (speed * 3.6) for speed in speeds]  # Convert m/s to km/h (x3.6), then to min/km
+    paces = [60 / (speed * 3.6) for speed in speeds]  # min/km
     
     plt.figure(figsize=(12, 6))
     
@@ -41,16 +41,24 @@ def plot_run(distances, speeds):
     plt.plot(distances, paces, color='blue', label='Pace')
     plt.fill_between(distances, 0, paces, color='blue', alpha=0.2)
     
-    # Set reasonable y-axis limits based on typical running paces
-    plt.ylim(min(paces) - 1, max(paces) + 1)  # Add padding
+    # Convert pace to min:sec for y-axis labels
+    pace_min = [int(p) for p in paces]
+    pace_sec = [int((p % 1) * 60) for p in paces]
+    y_ticks = [p for p in range(int(min(paces)), int(max(paces)) + 1)]  # Whole minute range
+    y_labels = [f"{m}:00" for m in y_ticks]  # Format as MM:00
+    
+    plt.yticks(y_ticks, y_labels)
+    plt.gca().invert_yaxis()  # Invert so slowest (highest) pace is at bottom
     
     total_distance = distances[-1] - distances[0]
-    avg_pace = sum(paces) / len(paces)  # Simple average for display
-    plt.text(0.5, -0.1, f'Total Distance: {total_distance:.2f} km\nAvg Pace: {int(avg_pace)}:{int((avg_pace % 1) * 60):02d} min/km', 
+    avg_pace = sum(paces) / len(paces)
+    avg_min = int(avg_pace)
+    avg_sec = int((avg_pace % 1) * 60)
+    plt.text(0.5, -0.15, f'Total Distance: {total_distance:.2f} km\nAvg Pace: {avg_min}:{avg_sec:02d} min/km', 
              ha='center', va='center', transform=plt.gca().transAxes, fontsize=12)
     
     plt.xlabel('Distance (km)')
-    plt.ylabel('Pace (min/km)')
+    plt.ylabel('Pace (min:sec/km)')
     plt.title('Run Pace Over Distance')
     plt.grid(True)
     plt.legend(loc='upper right')
