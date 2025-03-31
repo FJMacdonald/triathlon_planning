@@ -42,8 +42,9 @@
     <h2>80/20 Endurance Workouts</h2>
     <input type="text" id="searchBar" placeholder="Search workouts...">
     <div>
-        <canvas id="workoutChart" style="max-width: 800px; height: 300px; margin: 20px auto;"></canvas>
-        <!-- <canvas id="workoutChart" style="max-width: 1000px; height: 500px; margin: 20px auto;"></canvas>    </div> -->
+        <canvas id="workoutChart" style="width: 90%; height: 20vh; margin: 20px auto; display: block;"></canvas>
+    </div>
+
         <div class="grid-container" id="workoutGrid"></div>
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -127,7 +128,6 @@
                     console.error("Error processing FIT file:", error);
                 }
             }
-
             function renderChart(processData, fileName) {
                 const ctx = document.getElementById('workoutChart').getContext('2d');
 
@@ -181,9 +181,9 @@
                         ],
                         backgroundColor: zoneColors[zone],
                         borderColor: zoneColors[zone],
-                        borderWidth: 1,
+                        borderWidth: 2,
                         fill: true,
-                        stepped: 'before' // Creates a step-like effect
+                        stepped: 'before'
                     });
 
                     // Add label for the x-axis
@@ -220,10 +220,11 @@
                                         display: true,
                                         text: 'Zone'
                                     },
-                                    min: 1,
+                                    min: 0,
                                     max: 5,
                                     ticks: {
-                                        stepSize: 1
+                                        stepSize: 1,
+                                        callback: (value) => (value === 0 ? '0' : `Zone ${value}`) // Label ticks as "Zone 1", "Zone 2", etc., except for 0
                                     }
                                 }
                             },
@@ -233,7 +234,7 @@
                                     text: `Workout: ${fileName}`
                                 },
                                 legend: {
-                                    display: true,
+                                    position: 'right',
                                     labels: {
                                         generateLabels: (chart) => {
                                             const uniqueZones = [...new Set(zones)];
@@ -258,7 +259,11 @@
                             },
                             elements: {
                                 line: {
-                                    tension: 0 // Disable line smoothing for step effect
+                                    tension: 0,
+                                    borderWidth: 2
+                                },
+                                point: {
+                                    radius: 0
                                 }
                             }
                         }
