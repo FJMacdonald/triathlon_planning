@@ -1,3 +1,4 @@
+
 I want an app that allows me to visualize the run workouts provided on 8020endurance.com. The workouts are fit files but i want to plot them as a chart to visualize the workouts based on 5 zones of intensity (y-axis) and either time or distance on the x-axis, showing each zone by color.
 
 I'm having problems processing the fit files though:
@@ -148,4 +149,5 @@ def process_fit_file():
 
 if name == 'main':
     app.run(debug=True)
+
 
