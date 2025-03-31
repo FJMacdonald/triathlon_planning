@@ -1,0 +1,151 @@
+I want an app that allows me to visualize the run workouts provided on 8020endurance.com. The workouts are fit files but i want to plot them as a chart to visualize the workouts based on 5 zones of intensity (y-axis) and either time or distance on the x-axis, showing each zone by color.
+
+I'm having problems processing the fit files though:
+
+[Log] Sending URL to backend: – "https://www.8020endurance.com/wp-content/library/run/RRe1.FIT" (127.0.0.1, line 61)
+[Error] Error processing FIT file: – SyntaxError: The string did not match the expected pattern.
+SyntaxError: The string did not match the expected pattern.
+    (anonymous function) (127.0.0.1:87)
+
+Can you help me fix the issue and draw my charts.
+
+front end:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>80/20 Endurance Workouts</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #searchBar { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .workout-card { background-color: #f5f5f5; padding: 10px; border-radius: 5px; text-align: center; cursor: pointer; }
+        .workout-card:hover { background-color: #ddd; }
+    </style>
+</head>
+<body>
+    <h2>80/20 Endurance Workouts</h2>
+    <input type="text" id="searchBar" placeholder="Search workouts...">
+    <div class="grid-container" id="workoutGrid"></div>
+
+<script>
+    const fitFiles = [
+        { name: "RRe", count: 9 },
+        { name: "RF", count: 17 },
+        { name: "RAe", count: 22 },
+        { name: "RL", count: 15 },
+        { name: "RCI", count: 15 },
+        { name: "RT", count: 20 },
+        { name: "RFF", count: 11 },
+        { name: "RLFF", count: 6 },
+        { name: "RHR", count: 14 },
+        { name: "RMI", count: 4 },
+        { name: "RAn", count: 5 },
+        { name: "RSI", count: 11 },
+        { name: "RLI", count: 12 },
+        { name: "RSP", count: 21 },
+        { name: "RLSP", count: 6 }
+    ];
+
+    function populateWorkouts(filter = "") {
+        const grid = document.getElementById("workoutGrid");
+        grid.innerHTML = "";
+
+        fitFiles.forEach(workout => {
+            for (let i = 1; i <= workout.count; i++) {
+                let fileName = `${workout.name}${i}.FIT`;
+                let fileUrl = `https://www.8020endurance.com/wp-content/library/run/ ${fileName}`;
+
+                if (!fileName.toLowerCase().includes(filter.toLowerCase())) continue;
+
+                const card = document.createElement("div");
+                card.className = "workout-card";
+                card.innerHTML = `<strong>${fileName}</strong>`;
+                card.onclick = () => loadFitFile(fileUrl, fileName);
+                grid.appendChild(card);
+            }
+        });
+    }
+
+    async function loadFitFile(url, fileName) {
+        try {
+            console.log("Sending URL to backend:", url);
+            const getResponse = await fetch('/get-fit-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
+            });
+
+            if (!getResponse.ok) throw new Error("Failed to get file from backend");
+
+            const fileData = await getResponse.json();
+            if (fileData.error) throw new Error(fileData.error);
+
+            const fileResponse = await fetch(fileData.fileName);
+            const arrayBuffer = await fileResponse.arrayBuffer();
+            const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+            const processResponse = await fetch('/process-fit-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileName: fileData.fileName, data: base64Data })
+            });
+
+            const processData = await processResponse.json();
+            console.log("File processed:", processData);
+
+        } catch (error) {
+            console.error("Error processing FIT file:", error);
+        }
+    }
+
+    document.getElementById("searchBar").addEventListener("input", () => {
+        populateWorkouts(document.getElementById("searchBar").value);
+    });
+
+    populateWorkouts();
+</script>
+</body>
+</html> 
+
+back end:
+from flask import Flask, request, jsonify, send_file, render_template
+import requests
+import io  
+
+app = Flask(name)
+
+@app.route('/')
+def serve_frontend():
+    return render_template('index.html')
+
+@app.route('/get-fit-file', methods=['POST'])
+def get_fit_file():
+    url = "https://www.8020endurance.com/wp-content/library/run/RRe1.FIT"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        file_stream = io.BytesIO(response.content)
+        return send_file(
+            file_stream,
+            mimetype="application/octet-stream",
+            as_attachment=True,
+            download_name="RRe1.FIT"  # Updated parameter name
+        )
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch file: {str(e)}"}), 500
+
+@app.route('/process-fit-file', methods=['POST'])
+def process_fit_file():
+    data = request.json
+    file_name = data['fileName']
+    base64_data = data['data']
+    return jsonify({'processed': True, 'fileName': file_name})
+
+if name == 'main':
+    app.run(debug=True)
+
