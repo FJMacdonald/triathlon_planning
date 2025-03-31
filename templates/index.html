@@ -42,234 +42,237 @@
     <h2>80/20 Endurance Workouts</h2>
     <input type="text" id="searchBar" placeholder="Search workouts...">
     <div>
-        <canvas id="workoutChart" style="max-width: 800px; margin: 20px auto;"></canvas>
-    </div>
-    <div class="grid-container" id="workoutGrid"></div>
+        <canvas id="workoutChart" style="max-width: 800px; height: 300px; margin: 20px auto;"></canvas>
+        <!-- <canvas id="workoutChart" style="max-width: 1000px; height: 500px; margin: 20px auto;"></canvas>    </div> -->
+        <div class="grid-container" id="workoutGrid"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        const fitFiles = [
-            { name: "RRe", count: 9 },
-            { name: "RF", count: 17 },
-            { name: "RAe", count: 22 },
-            { name: "RL", count: 15 },
-            { name: "RCI", count: 15 },
-            { name: "RT", count: 20 },
-            { name: "RFF", count: 11 },
-            { name: "RLFF", count: 6 },
-            { name: "RHR", count: 14 },
-            { name: "RMI", count: 4 },
-            { name: "RAn", count: 5 },
-            { name: "RSI", count: 11 },
-            { name: "RLI", count: 12 },
-            { name: "RSP", count: 21 },
-            { name: "RLSP", count: 6 }
-        ];
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            const fitFiles = [
+                { name: "RRe", count: 9 },
+                { name: "RF", count: 17 },
+                { name: "RAe", count: 22 },
+                { name: "RL", count: 15 },
+                { name: "RCI", count: 15 },
+                { name: "RT", count: 20 },
+                { name: "RFF", count: 11 },
+                { name: "RLFF", count: 6 },
+                { name: "RHR", count: 14 },
+                { name: "RMI", count: 4 },
+                { name: "RAn", count: 5 },
+                { name: "RSI", count: 11 },
+                { name: "RLI", count: 12 },
+                { name: "RSP", count: 21 },
+                { name: "RLSP", count: 6 }
+            ];
 
-        function arrayBufferToBase64(buffer) {
-            const bytes = new Uint8Array(buffer);
-            let binary = '';
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return btoa(binary);
-        }
-
-        function populateWorkouts(filter = "") {
-            const grid = document.getElementById("workoutGrid");
-            grid.innerHTML = "";
-
-            fitFiles.forEach(workout => {
-                for (let i = 1; i <= workout.count; i++) {
-                    let fileName = `${workout.name}${i}.FIT`;
-                    let fileUrl = `https://www.8020endurance.com/wp-content/library/run/${fileName}`;
-
-                    if (!fileName.toLowerCase().includes(filter.toLowerCase())) continue;
-
-                    const card = document.createElement("div");
-                    card.className = "workout-card";
-                    card.innerHTML = `<strong>${fileName}</strong>`;
-                    card.onclick = () => loadFitFile(fileUrl, fileName);
-                    grid.appendChild(card);
+            function arrayBufferToBase64(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
                 }
-            });
-        }
+                return btoa(binary);
+            }
 
-        async function loadFitFile(url, fileName) {
-            try {
-                console.log("Sending URL to backend:", url);
-                const getResponse = await fetch('/get-fit-file', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
+            function populateWorkouts(filter = "") {
+                const grid = document.getElementById("workoutGrid");
+                grid.innerHTML = "";
+
+                fitFiles.forEach(workout => {
+                    for (let i = 1; i <= workout.count; i++) {
+                        let fileName = `${workout.name}${i}.FIT`;
+                        let fileUrl = `https://www.8020endurance.com/wp-content/library/run/${fileName}`;
+
+                        if (!fileName.toLowerCase().includes(filter.toLowerCase())) continue;
+
+                        const card = document.createElement("div");
+                        card.className = "workout-card";
+                        card.innerHTML = `<strong>${fileName}</strong>`;
+                        card.onclick = () => loadFitFile(fileUrl, fileName);
+                        grid.appendChild(card);
+                    }
                 });
-
-                if (!getResponse.ok) throw new Error("Failed to get file from backend");
-
-                const fileData = await getResponse.blob();
-                const arrayBuffer = await fileData.arrayBuffer();
-                const base64Data = arrayBufferToBase64(arrayBuffer);
-
-                const processResponse = await fetch('/process-fit-file', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileName: url.split('/').pop(), data: base64Data })
-                });
-
-                const processData = await processResponse.json();
-                if (processData.error) throw new Error(processData.error);
-
-                console.log("File processed:", processData);
-
-                // Render the chart
-                renderChart(processData, fileName);
-            } catch (error) {
-                console.error("Error processing FIT file:", error);
-            }
-        }
-
-        function renderChart(processData, fileName) {
-            const ctx = document.getElementById('workoutChart').getContext('2d');
-
-            // Destroy previous chart if it exists and is a valid Chart.js instance
-            if (window.workoutChart && typeof window.workoutChart.destroy === 'function') {
-                window.workoutChart.destroy();
             }
 
-            const durations = processData.durations;
-            const zones = processData.zones;
-            const isTimeBased = processData.isTimeBased;
+            async function loadFitFile(url, fileName) {
+                try {
+                    console.log("Sending URL to backend:", url);
+                    const getResponse = await fetch('/get-fit-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: url })
+                    });
 
-            if (!durations || !zones || durations.length === 0 || zones.length === 0) {
-                console.error("No valid data to plot.");
-                return;
+                    if (!getResponse.ok) throw new Error("Failed to get file from backend");
+
+                    const fileData = await getResponse.blob();
+                    const arrayBuffer = await fileData.arrayBuffer();
+                    const base64Data = arrayBufferToBase64(arrayBuffer);
+
+                    const processResponse = await fetch('/process-fit-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileName: url.split('/').pop(), data: base64Data })
+                    });
+
+                    const processData = await processResponse.json();
+                    if (processData.error) throw new Error(processData.error);
+
+                    console.log("File processed:", processData);
+
+                    // Render the chart
+                    renderChart(processData, fileName);
+                } catch (error) {
+                    console.error("Error processing FIT file:", error);
+                }
             }
 
-            // Define colors for each zone
-            const zoneColors = {
-                1: 'cyan',
-                2: 'blue',
-                3: 'purple',
-                4: 'pink',
-                5: 'red'
-            };
+            function renderChart(processData, fileName) {
+                const ctx = document.getElementById('workoutChart').getContext('2d');
 
-            // Calculate total duration per zone for the legend
-            const zoneDurations = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-            for (let i = 0; i < durations.length; i++) {
-                zoneDurations[zones[i]] += durations[i][1];
-            }
+                // Destroy previous chart if it exists and is a valid Chart.js instance
+                if (window.workoutChart && typeof window.workoutChart.destroy === 'function') {
+                    window.workoutChart.destroy();
+                }
 
-            // Prepare data for Chart.js
-            const datasets = [];
-            let currentX = 0;
-            const labels = [];
-            const unit = isTimeBased ? 'min' : 'km';
+                const durations = processData.durations;
+                const zones = processData.zones;
+                const isTimeBased = processData.isTimeBased;
 
-            for (let i = 0; i < durations.length; i++) {
-                const duration = durations[i][1];
-                const zone = zones[i];
-                const startX = currentX;
-                const endX = currentX + duration;
+                if (!durations || !zones || durations.length === 0 || zones.length === 0) {
+                    console.error("No valid data to plot.");
+                    return;
+                }
 
-                // Add dataset for this step as a bar
-                datasets.push({
-                    label: `Zone ${zone}`,
-                    data: [{
-                        x: [startX, endX], // Bar spans from startX to endX
-                        y: zone
-                    }],
-                    backgroundColor: zoneColors[zone],
-                    borderColor: zoneColors[zone],
-                    borderWidth: 1,
-                    barThickness: 'flex' // Adjusts bar width based on duration
-                });
+                // Define colors for each zone
+                const zoneColors = {
+                    1: 'cyan',
+                    2: 'blue',
+                    3: 'purple',
+                    4: 'pink',
+                    5: 'red'
+                };
 
-                // Add labels for the x-axis
-                if (i === 0) {
+                // Calculate total duration per zone for the legend
+                const zoneDurations = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+                for (let i = 0; i < durations.length; i++) {
+                    zoneDurations[zones[i]] += durations[i][1];
+                }
+
+                // Prepare data for Chart.js
+                const datasets = [];
+                let currentX = 0;
+                const labels = [];
+                const unit = isTimeBased ? 'min' : 'km';
+
+                for (let i = 0; i < durations.length; i++) {
+                    const duration = durations[i][1];
+                    const zone = zones[i];
+                    const startX = currentX;
+                    const endX = currentX + duration;
+
+                    // Add dataset for this step
+                    datasets.push({
+                        label: `Zone ${zone}`,
+                        data: [
+                            { x: startX, y: zone },
+                            { x: endX, y: zone }
+                        ],
+                        backgroundColor: zoneColors[zone],
+                        borderColor: zoneColors[zone],
+                        borderWidth: 1,
+                        fill: true,
+                        stepped: 'before' // Creates a step-like effect
+                    });
+
+                    // Add label for the x-axis
                     labels.push(startX);
+                    if (i === durations.length - 1) {
+                        labels.push(endX);
+                    }
+
+                    currentX = endX;
                 }
-                labels.push(endX);
 
-                currentX = endX;
-            }
-
-            // Create the chart
-            try {
-                window.workoutChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: datasets
-                    },
-                    options: {
-                        indexAxis: 'x', // Ensure bars are horizontal along the x-axis
-                        scales: {
-                            x: {
-                                type: 'linear',
-                                title: {
-                                    display: true,
-                                    text: isTimeBased ? 'Time (min)' : 'Distance (km)'
-                                },
-                                ticks: {
-                                    stepSize: 1
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Zone'
-                                },
-                                min: 1,
-                                max: 5,
-                                ticks: {
-                                    stepSize: 1,
-                                    callback: (value) => `Zone ${value}` // Label ticks as "Zone 1", "Zone 2", etc.
-                                },
-                                reverse: false // Ensure Zone 5 is at the top
-                            }
+                // Create the chart
+                try {
+                    window.workoutChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
                         },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `Workout: ${fileName}`
-                            },
-                            legend: {
-                                position: 'right', // Move legend to the right
-                                labels: {
-                                    generateLabels: (chart) => {
-                                        const uniqueZones = [...new Set(zones)];
-                                        return uniqueZones.map(zone => ({
-                                            text: `Zone ${zone}: ${zoneDurations[zone].toFixed(2)} ${unit}`,
-                                            fillStyle: zoneColors[zone],
-                                            strokeStyle: zoneColors[zone],
-                                            lineWidth: 1
-                                        }));
+                        options: {
+                            scales: {
+                                x: {
+                                    type: 'linear',
+                                    title: {
+                                        display: true,
+                                        text: isTimeBased ? 'Time (min)' : 'Distance (km)'
+                                    },
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                },
+                                y: {
+                                    title: {
+                                        display: true,
+                                        text: 'Zone'
+                                    },
+                                    min: 1,
+                                    max: 5,
+                                    ticks: {
+                                        stepSize: 1
                                     }
                                 }
                             },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => {
-                                        const datasetIndex = context.datasetIndex;
-                                        const duration = durations[datasetIndex][1];
-                                        return `Zone ${zones[datasetIndex]}: ${duration.toFixed(2)} ${unit}`;
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: `Workout: ${fileName}`
+                                },
+                                legend: {
+                                    display: true,
+                                    labels: {
+                                        generateLabels: (chart) => {
+                                            const uniqueZones = [...new Set(zones)];
+                                            return uniqueZones.map(zone => ({
+                                                text: `Zone ${zone}: ${zoneDurations[zone].toFixed(2)} ${unit}`,
+                                                fillStyle: zoneColors[zone],
+                                                strokeStyle: zoneColors[zone],
+                                                lineWidth: 1
+                                            }));
+                                        }
                                     }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => {
+                                            const datasetIndex = context.datasetIndex;
+                                            const duration = durations[datasetIndex][1];
+                                            return `Zone ${zones[datasetIndex]}: ${duration.toFixed(2)} ${unit}`;
+                                        }
+                                    }
+                                }
+                            },
+                            elements: {
+                                line: {
+                                    tension: 0 // Disable line smoothing for step effect
                                 }
                             }
                         }
-                    }
-                });
-            } catch (error) {
-                console.error("Error creating chart:", error);
+                    });
+                } catch (error) {
+                    console.error("Error creating chart:", error);
+                }
             }
-        }
-        document.getElementById("searchBar").addEventListener("input", () => {
-            populateWorkouts(document.getElementById("searchBar").value);
-        });
+            document.getElementById("searchBar").addEventListener("input", () => {
+                populateWorkouts(document.getElementById("searchBar").value);
+            });
 
-        populateWorkouts();
-    </script>
+            populateWorkouts();
+        </script>
 </body>
 
 </html>
