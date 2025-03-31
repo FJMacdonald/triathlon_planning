@@ -42,7 +42,7 @@
     <h2>80/20 Endurance Workouts</h2>
     <input type="text" id="searchBar" placeholder="Search workouts...">
     <div>
-        <canvas id="workoutChart" style="width: 90%; height: 20vh; margin: 20px auto; display: block;"></canvas>
+        <canvas id="workoutChart" style="width: 90%; height: 50vh; margin: 20px auto; display: block;"></canvas>
     </div>
 
         <div class="grid-container" id="workoutGrid"></div>
@@ -275,6 +275,14 @@
             document.getElementById("searchBar").addEventListener("input", () => {
                 populateWorkouts(document.getElementById("searchBar").value);
             });
+            // Set initial canvas dimensions on page load
+            window.addEventListener('load', () => {
+                const canvas = document.getElementById('workoutChart');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            });
+
+            populateWorkouts();
 
             populateWorkouts();
         </script>
